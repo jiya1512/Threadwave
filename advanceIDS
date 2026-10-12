@@ -1,0 +1,443 @@
+import re
+import base64
+from urllib.parse import unquote_plus, parse_qs
+from datetime import datetime
+
+# =========================
+# ADVANCED MALICIOUS DETECTION
+# =========================
+
+def is_malicious(req):
+    """
+    Advanced multi-layer threat detection system
+    Returns: (is_malicious: bool, reason: str, severity: str, details: dict)
+    """
+    
+    # Extract payload from multiple sources
+    raw_payload = req.full_path + " " + str(req.get_data(as_text=True))
+    decoded_payload = unquote_plus(raw_payload).lower()
+    headers = {k.lower(): v.lower() for k, v in req.headers.items()}
+    user_agent = headers.get('user-agent', '')
+    
+    # Run all detection layers
+    checks = [
+        check_sql_injection(decoded_payload),
+        check_xss(decoded_payload, raw_payload),
+        check_command_injection(decoded_payload),
+        check_path_traversal(decoded_payload),
+        check_rce(decoded_payload),
+        check_xxe(decoded_payload),
+        check_ssrf(decoded_payload),
+        check_ldap_injection(decoded_payload),
+        check_nosql_injection(decoded_payload),
+        check_obfuscation(raw_payload),
+        check_malicious_user_agent(user_agent),
+        check_suspicious_headers(headers),
+        check_file_upload_attack(req),
+        check_http_smuggling(req),
+    ]
+    
+    # Find highest severity threat
+    for malicious, reason, severity, details in checks:
+        if malicious:
+            return True, reason, severity, details
+    
+    return False, None, "LOW", {}
+
+
+# =========================
+# LAYER 1: SQL INJECTION
+# =========================
+def check_sql_injection(payload):
+    """Detect SQL injection attempts"""
+    
+    sql_patterns = [
+        # Union-based
+        (r"union\s+(all\s+)?select", "CRITICAL", "Union-based SQL Injection"),
+        
+        # Boolean-based
+        (r"'\s*or\s*'1'\s*=\s*'1", "CRITICAL", "Boolean SQL Injection"),
+        (r"'\s*or\s*1\s*=\s*1", "CRITICAL", "Boolean SQL Injection"),
+        (r"admin'\s*--", "CRITICAL", "Comment-based SQL Injection"),
+        (r"admin'\s*#", "CRITICAL", "Comment-based SQL Injection"),
+        
+        # Time-based blind
+        (r"sleep\s*\(\s*\d+\s*\)", "HIGH", "Time-based Blind SQLi"),
+        (r"benchmark\s*\(", "HIGH", "Benchmark-based SQLi"),
+        (r"waitfor\s+delay", "HIGH", "Time-delay SQLi"),
+        
+        # Error-based
+        (r"convert\s*\(\s*int", "HIGH", "Error-based SQLi"),
+        (r"cast\s*\(\s*", "MEDIUM", "Type-casting SQLi"),
+        
+        # Stacked queries
+        (r";\s*drop\s+table", "CRITICAL", "Stacked Query - DROP"),
+        (r";\s*delete\s+from", "CRITICAL", "Stacked Query - DELETE"),
+        (r";\s*insert\s+into", "HIGH", "Stacked Query - INSERT"),
+        (r";\s*update\s+", "HIGH", "Stacked Query - UPDATE"),
+        
+        # Database enumeration
+        (r"information_schema", "HIGH", "Database Enumeration"),
+        (r"sys\.databases", "HIGH", "Database Enumeration"),
+        (r"mysql\.user", "HIGH", "Database Enumeration"),
+        
+        # Common SQL functions
+        (r"concat\s*\(", "MEDIUM", "SQL Function - CONCAT"),
+        (r"substring\s*\(", "MEDIUM", "SQL Function - SUBSTRING"),
+        (r"ascii\s*\(", "MEDIUM", "SQL Function - ASCII"),
+        (r"version\s*\(\s*\)", "MEDIUM", "SQL Version Detection"),
+        
+        # SQL comments
+        (r"/\*.*\*/", "MEDIUM", "SQL Comment Injection"),
+        (r"--\s*$", "MEDIUM", "SQL Line Comment"),
+    ]
+    
+    for pattern, severity, description in sql_patterns:
+        if re.search(pattern, payload, re.IGNORECASE):
+            return True, f"SQL_Injection: {description}", severity, {"pattern": pattern}
+    
+    return False, None, "LOW", {}
+
+
+# =========================
+# LAYER 2: XSS (Cross-Site Scripting)
+# =========================
+def check_xss(payload, raw_payload):
+    """Detect XSS attacks"""
+    
+    xss_patterns = [
+        # Script tags
+        (r"<script[^>]*>", "CRITICAL", "Script Tag Injection"),
+        (r"</script>", "CRITICAL", "Script Tag Injection"),
+        (r"javascript:", "HIGH", "JavaScript Protocol"),
+        
+        # Event handlers
+        (r"on\w+\s*=", "HIGH", "Event Handler Injection"),
+        (r"onerror\s*=", "CRITICAL", "onError Handler"),
+        (r"onload\s*=", "HIGH", "onLoad Handler"),
+        (r"onclick\s*=", "MEDIUM", "onClick Handler"),
+        (r"onmouseover\s*=", "MEDIUM", "onMouseOver Handler"),
+        
+        # Common XSS functions
+        (r"alert\s*\(", "HIGH", "Alert Function"),
+        (r"prompt\s*\(", "HIGH", "Prompt Function"),
+        (r"confirm\s*\(", "MEDIUM", "Confirm Function"),
+        
+        # DOM manipulation
+        (r"document\.cookie", "HIGH", "Cookie Theft Attempt"),
+        (r"document\.write", "MEDIUM", "DOM Write"),
+        (r"window\.location", "MEDIUM", "Location Redirect"),
+        
+        # Iframe injection
+        (r"<iframe", "HIGH", "Iframe Injection"),
+        (r"<embed", "HIGH", "Embed Tag Injection"),
+        (r"<object", "MEDIUM", "Object Tag Injection"),
+        
+        # SVG-based XSS
+        (r"<svg[^>]*onload", "HIGH", "SVG-based XSS"),
+        
+        # Data URLs
+        (r"data:text/html", "MEDIUM", "Data URL Injection"),
+        
+        # Expression language
+        (r"\$\{.*\}", "MEDIUM", "Expression Language Injection"),
+    ]
+    
+    for pattern, severity, description in xss_patterns:
+        if re.search(pattern, payload, re.IGNORECASE):
+            return True, f"XSS: {description}", severity, {"pattern": pattern}
+    
+    # Check for HTML entity encoding evasion
+    if re.search(r"&#\d+;", raw_payload) or re.search(r"&#x[0-9a-f]+;", raw_payload):
+        return True, "XSS: HTML Entity Encoding", "MEDIUM", {"type": "encoded"}
+    
+    return False, None, "LOW", {}
+
+
+# =========================
+# LAYER 3: COMMAND INJECTION
+# =========================
+def check_command_injection(payload):
+    """Detect OS command injection"""
+    
+    cmd_patterns = [
+        # Command chaining
+        (r";\s*\w+", "CRITICAL", "Command Chaining (semicolon)"),
+        (r"\|\s*\w+", "CRITICAL", "Command Piping"),
+        (r"&&\s*\w+", "CRITICAL", "AND Command Chain"),
+        (r"\|\|\s*\w+", "HIGH", "OR Command Chain"),
+        
+        # Command substitution
+        (r"`[^`]+`", "CRITICAL", "Backtick Command Substitution"),
+        (r"\$\([^)]+\)", "CRITICAL", "Dollar Command Substitution"),
+        
+        # Common dangerous commands
+        (r"\b(rm|del|erase)\b.*-r", "CRITICAL", "Recursive Delete"),
+        (r"\b(wget|curl)\b", "HIGH", "File Download Command"),
+        (r"\b(nc|netcat)\b", "CRITICAL", "Netcat Reverse Shell"),
+        (r"\b(bash|sh|zsh|csh)\b", "HIGH", "Shell Execution"),
+        (r"\b(python|perl|ruby|php)\b.*-c", "HIGH", "Interpreter Execution"),
+        
+        # Windows commands
+        (r"\bcmd\.exe\b", "CRITICAL", "Windows CMD"),
+        (r"\bpowershell\b", "CRITICAL", "PowerShell"),
+        (r"\bwscript\b", "HIGH", "Windows Script Host"),
+        
+        # File operations
+        (r"\bcat\b.*/(etc|passwd|shadow)", "CRITICAL", "Password File Access"),
+        (r"\btype\b.*win\.ini", "MEDIUM", "Windows Config Access"),
+        
+        # Network commands
+        (r"\bping\b.*-[cnt]", "MEDIUM", "Network Ping"),
+        (r"\bnslookup\b", "MEDIUM", "DNS Lookup"),
+        (r"\btelnet\b", "HIGH", "Telnet Connection"),
+    ]
+    
+    for pattern, severity, description in cmd_patterns:
+        if re.search(pattern, payload, re.IGNORECASE):
+            return True, f"Command_Injection: {description}", severity, {"pattern": pattern}
+    
+    return False, None, "LOW", {}
+
+
+# =========================
+# LAYER 4: PATH TRAVERSAL
+# =========================
+def check_path_traversal(payload):
+    """Detect directory traversal attacks"""
+    
+    traversal_patterns = [
+        (r"\.\./", "HIGH", "Unix Path Traversal"),
+        (r"\.\./\.\./", "CRITICAL", "Deep Path Traversal"),
+        (r"\.\.\\", "HIGH", "Windows Path Traversal"),
+        (r"%2e%2e/", "HIGH", "Encoded Path Traversal"),
+        (r"%252e%252e/", "HIGH", "Double-Encoded Traversal"),
+        (r"\.\.;", "MEDIUM", "Semicolon Traversal"),
+        (r"/etc/passwd", "CRITICAL", "Passwd File Access"),
+        (r"/etc/shadow", "CRITICAL", "Shadow File Access"),
+        (r"c:\\windows\\", "HIGH", "Windows System Access"),
+        (r"/proc/self/environ", "HIGH", "Process Environment Access"),
+        (r"\.\.\.\.\/", "HIGH", "Alternative Traversal"),
+    ]
+    
+    for pattern, severity, description in traversal_patterns:
+        if re.search(pattern, payload, re.IGNORECASE):
+            return True, f"Path_Traversal: {description}", severity, {"pattern": pattern}
+    
+    return False, None, "LOW", {}
+
+
+# =========================
+# LAYER 5: REMOTE CODE EXECUTION (RCE)
+# =========================
+def check_rce(payload):
+    """Detect remote code execution attempts"""
+    
+    rce_patterns = [
+        (r"\beval\s*\(", "CRITICAL", "Eval Function"),
+        (r"\bexec\s*\(", "CRITICAL", "Exec Function"),
+        (r"\bsystem\s*\(", "CRITICAL", "System Function"),
+        (r"\bpassthru\s*\(", "CRITICAL", "Passthru Function"),
+        (r"\bshell_exec\s*\(", "CRITICAL", "Shell Exec"),
+        (r"\bpopen\s*\(", "HIGH", "Popen Function"),
+        (r"\bproc_open\s*\(", "HIGH", "Proc Open"),
+        (r"\bassert\s*\(", "HIGH", "Assert Function"),
+        (r"\bcreate_function\s*\(", "HIGH", "Create Function"),
+        (r"\binclude\s*\(", "MEDIUM", "File Include"),
+        (r"\brequire\s*\(", "MEDIUM", "File Require"),
+        (r"__import__\s*\(", "HIGH", "Python Import"),
+        (r"\.\.\.\.\/", "HIGH", "Alternative Traversal"),
+    ]
+    
+    for pattern, severity, description in rce_patterns:
+        if re.search(pattern, payload, re.IGNORECASE):
+            return True, f"RCE: {description}", severity, {"pattern": pattern}
+    
+    return False, None, "LOW", {}
+
+
+# =========================
+# LAYER 6: XXE (XML External Entity)
+# =========================
+def check_xxe(payload):
+    """Detect XXE attacks"""
+    
+    if "<!entity" in payload or "<!doctype" in payload:
+        if "system" in payload or "public" in payload:
+            return True, "XXE: XML External Entity", "CRITICAL", {"type": "xxe"}
+    
+    return False, None, "LOW", {}
+
+
+# =========================
+# LAYER 7: SSRF (Server-Side Request Forgery)
+# =========================
+def check_ssrf(payload):
+    """Detect SSRF attempts"""
+    
+    ssrf_patterns = [
+        (r"(localhost|127\.0\.0\.1)", "HIGH", "Localhost Access"),
+        (r"(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)", "MEDIUM", "Private IP Access"),
+        (r"(file://|gopher://|dict://)", "HIGH", "Dangerous URL Scheme"),
+        (r"@[\w\.-]+:\d+", "MEDIUM", "URL with Credentials"),
+    ]
+    
+    for pattern, severity, description in ssrf_patterns:
+        if re.search(pattern, payload, re.IGNORECASE):
+            return True, f"SSRF: {description}", severity, {"pattern": pattern}
+    
+    return False, None, "LOW", {}
+
+
+# =========================
+# LAYER 8: LDAP INJECTION
+# =========================
+def check_ldap_injection(payload):
+    """Detect LDAP injection"""
+    
+    if re.search(r"\(\*\)", payload) or re.search(r"\|.*\)", payload):
+        return True, "LDAP_Injection: Filter Manipulation", "HIGH", {"type": "ldap"}
+    
+    return False, None, "LOW", {}
+
+
+# =========================
+# LAYER 9: NoSQL INJECTION
+# =========================
+def check_nosql_injection(payload):
+    """Detect NoSQL injection"""
+    
+    nosql_patterns = [
+        (r"\$where", "HIGH", "MongoDB $where"),
+        (r"\$ne", "MEDIUM", "MongoDB $ne (not equal)"),
+        (r"\$gt", "MEDIUM", "MongoDB $gt (greater than)"),
+        (r"\$regex", "MEDIUM", "MongoDB $regex"),
+    ]
+    
+    for pattern, severity, description in nosql_patterns:
+        if re.search(pattern, payload, re.IGNORECASE):
+            return True, f"NoSQL_Injection: {description}", severity, {"pattern": pattern}
+    
+    return False, None, "LOW", {}
+
+
+# =========================
+# LAYER 10: OBFUSCATION DETECTION
+# =========================
+def check_obfuscation(payload):
+    """Detect encoded/obfuscated payloads"""
+    
+    # Base64 detection (long base64 strings)
+    base64_pattern = r"(?:[A-Za-z0-9+/]{40,}={0,2})"
+    if re.search(base64_pattern, payload):
+        try:
+            # Try to decode and check content
+            potential_b64 = re.findall(base64_pattern, payload)
+            for b64 in potential_b64:
+                try:
+                    decoded = base64.b64decode(b64).decode('utf-8', errors='ignore').lower()
+                    if any(word in decoded for word in ['script', 'eval', 'system', 'exec']):
+                        return True, "Obfuscation: Base64 Encoded Malicious Payload", "HIGH", {"encoded": True}
+                except:
+                    pass
+        except:
+            pass
+        return True, "Obfuscation: Base64 Encoded Payload", "MEDIUM", {"encoded": True}
+    
+    # Hex encoding
+    if re.search(r"(\\x[0-9a-f]{2}){5,}", payload, re.IGNORECASE):
+        return True, "Obfuscation: Hex Encoded Payload", "MEDIUM", {"encoded": True}
+    
+    # Unicode encoding
+    if re.search(r"(\\u[0-9a-f]{4}){3,}", payload, re.IGNORECASE):
+        return True, "Obfuscation: Unicode Encoded Payload", "MEDIUM", {"encoded": True}
+    
+    return False, None, "LOW", {}
+
+
+# =========================
+# LAYER 11: MALICIOUS USER AGENTS
+# =========================
+def check_malicious_user_agent(user_agent):
+    """Detect security scanners and bots"""
+    
+    scanners = [
+        ("sqlmap", "CRITICAL", "SQLMap Scanner"),
+        ("nikto", "HIGH", "Nikto Scanner"),
+        ("nmap", "HIGH", "Nmap Scanner"),
+        ("masscan", "HIGH", "Masscan Scanner"),
+        ("metasploit", "CRITICAL", "Metasploit Framework"),
+        ("burp", "MEDIUM", "Burp Suite"),
+        ("zap", "MEDIUM", "OWASP ZAP"),
+        ("acunetix", "HIGH", "Acunetix Scanner"),
+        ("nessus", "HIGH", "Nessus Scanner"),
+        ("openvas", "HIGH", "OpenVAS Scanner"),
+        ("qualys", "MEDIUM", "Qualys Scanner"),
+        ("havij", "CRITICAL", "Havij SQL Injection Tool"),
+        ("pangolin", "CRITICAL", "Pangolin Scanner"),
+        ("python-requests", "MEDIUM", "Python Requests Library"),
+        ("curl", "LOW", "cURL Client"),
+        ("wget", "LOW", "Wget Client"),
+    ]
+    
+    for scanner, severity, description in scanners:
+        if scanner in user_agent:
+            return True, f"Scanner_UserAgent: {description}", severity, {"scanner": scanner}
+    
+    return False, None, "LOW", {}
+
+
+# =========================
+# LAYER 12: SUSPICIOUS HEADERS
+# =========================
+def check_suspicious_headers(headers):
+    """Check for suspicious HTTP headers"""
+    
+    # Missing or suspicious User-Agent
+    if 'user-agent' not in headers or headers['user-agent'] == '':
+        return True, "Suspicious_Headers: Missing User-Agent", "MEDIUM", {"header": "user-agent"}
+    
+    # Suspicious X-Forwarded headers (proxy bypass attempts)
+    suspicious_xff = ['127.0.0.1', 'localhost', '::1', '0.0.0.0']
+    if 'x-forwarded-for' in headers:
+        for ip in suspicious_xff:
+            if ip in headers['x-forwarded-for']:
+                return True, "Suspicious_Headers: X-Forwarded-For Manipulation", "MEDIUM", {"ip": ip}
+    
+    return False, None, "LOW", {}
+
+
+# =========================
+# LAYER 13: FILE UPLOAD ATTACKS
+# =========================
+def check_file_upload_attack(req):
+    """Detect malicious file uploads"""
+    
+    if req.files:
+        for file_key in req.files:
+            file = req.files[file_key]
+            filename = file.filename.lower()
+            
+            # Dangerous extensions
+            dangerous_exts = ['.php', '.jsp', '.asp', '.aspx', '.exe', '.sh', '.bat', '.cmd', '.ps1']
+            if any(filename.endswith(ext) for ext in dangerous_exts):
+                return True, f"File_Upload: Dangerous Extension ({filename})", "CRITICAL", {"filename": filename}
+            
+            # Double extension
+            if filename.count('.') > 1:
+                return True, f"File_Upload: Double Extension ({filename})", "HIGH", {"filename": filename}
+    
+    return False, None, "LOW", {}
+
+
+# =========================
+# LAYER 14: HTTP REQUEST SMUGGLING
+# =========================
+def check_http_smuggling(req):
+    """Detect HTTP request smuggling attempts"""
+    
+    # Check for conflicting Content-Length and Transfer-Encoding
+    if 'content-length' in req.headers and 'transfer-encoding' in req.headers:
+        return True, "HTTP_Smuggling: Conflicting Headers", "HIGH", {"type": "cl-te"}
+    
+    return False, None, "LOW", {}

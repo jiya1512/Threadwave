@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Security Operations Center - IDS Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #000000;
+            --bg-secondary: #1a1a1a;
+            --bg-card: #2d2d2d;
+            --accent-primary: #808080;
+            --accent-secondary: #a0a0a0;
+            --accent-light: #c0c0c0;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0a0;
+            --border-color: #4a4a4a;
+        }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            overflow-x: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, var(--bg-secondary) 0%, #1a1a1a 100%);
+            padding: 1.5rem 2rem;
+            border-bottom: 2px solid var(--accent-primary);
+            box-shadow: 0 4px 20px rgba(128, 128, 128, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .header-logo {
+            flex-shrink: 0;
+        }
+
+        .header-logo img {
+            width: 80px;
+            height: 80px;
+            border-radius: 8px;
+            object-fit: contain;
+            background: transparent;
+            display: block;
+        }
+
+        .header-logo .logo-fallback {
+            width: 80px;
+            height: 80px;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #808080 0%, #606060 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: white;
+        }
+
+        .header-title h1 {
+            font-size: 1.8rem;
+            font-weight: 700;
+            background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header-title p {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-top: 0.25rem;
+        }
+
+        .header-right {
+            display: flex;
+            gap: 1.5rem;
+            align-items: center;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: var(--bg-card);
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            border: 1px solid var(--border-color);
+        }
+
+        .pulse-dot {
+            width: 10px;
+            height: 10px;
+            background: var(--accent-primary);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.2); }
+        }
+
+        .container {
+            max-width: 1800px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .section-title {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .section-title::before {
+            content: '';
+            width: 5px;
+            height: 25px;
+            background: linear-gradient(180deg, var(--accent-primary), var(--accent-secondary));
+            border-radius: 3px;
+        }
+
+        .section-subtitle {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-left: 1.25rem;
+            margin-top: -0.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 15px;
+            padding: 1.5rem;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: var(--accent-primary);
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(128, 128, 128, 0.2);
+            border-color: var(--accent-primary);
+        }
+
+        .stat-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .stat-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+        }
+
+        .stat-icon.critical {
+            background: rgba(160, 160, 160, 0.2);
+            color: var(--accent-secondary);
+        }
+
+        .stat-icon.warning {
+            background: rgba(112, 112, 112, 0.2);
+            color: var(--accent-primary);
+        }
+
+        .stat-icon.success {
+            background: rgba(128, 128, 128, 0.2);
+            color: var(--accent-primary);
+        }
+
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .trend {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            font-size: 0.85rem;
+            margin-top: 0.5rem;
+        }
+
+        .trend.up {
+            color: var(--accent-secondary);
+        }
+
+        .trend.down {
+            color: var(--accent-primary);
+        }
+
+        .card-container {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 15px;
+            padding: 1.5rem;
+            position: relative;
+            overflow: hidden;
+            margin-bottom: 1.5rem;
+        }
+
+        .card-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: var(--accent-primary);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .card-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .card-title::before {
+            content: '';
+            width: 4px;
+            height: 20px;
+            background: linear-gradient(180deg, var(--accent-primary), var(--accent-secondary));
+            border-radius: 2px;
+        }
+
+        .two-column-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .time-selector {
+            display: flex;
+            gap: 0.5rem;
+            background: var(--bg-secondary);
+            padding: 0.25rem;
+            border-radius: 8px;
+        }
+
+        .time-btn {
+            padding: 0.4rem 0.8rem;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            transition: all 0.3s ease;
+        }
+
+        .time-btn.active {
+            background: var(--accent-primary);
+            color: white;
+        }
+
+        .chart-canvas {
+            width: 100%;
+            height: 300px;
+            position: relative;
+        }
+
+        .alerts-panel {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .alert-item {
+            background: var(--bg-secondary);
+            border-left: 4px solid var(--accent-secondary);
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            animation: slideIn 0.5s ease;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .alert-item.warning {
+            border-left-color: var(--accent-primary);
+        }
+
+        .alert-item.info {
+            border-left-color: var(--accent-primary);
+        }
+
+        .alert-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .alert-title {
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        .alert-time {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .alert-detail {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+        }
+
+        .badge {
+            background: rgba(128, 128, 128, 0.2);
+            color: var(--accent-primary);
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-weight: 500;
+        }
+
+        .soc-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .soc-item {
+            background: var(--bg-secondary);
+            padding: 1.25rem;
+            border-radius: 10px;
+            border: 1px solid var(--border-color);
+            text-align: center;
+        }
+
+        .soc-item:hover {
+            border-color: var(--accent-green);
+            background: rgba(128, 128, 128, 0.05);
+        }
+
+        .soc-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--accent-primary);
+            margin-bottom: 0.5rem;
+        }
+
+        .soc-value.danger {
+            color: var(--accent-secondary);
+        }
+
+        .soc-value.warning {
+            color: var(--accent-primary);
+        }
+
+        .soc-label {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .table-container {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead {
+            position: sticky;
+            top: 0;
+            background: var(--bg-secondary);
+            z-index: 10;
+        }
+
+        th {
+            padding: 1rem;
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-secondary);
+            border-bottom: 2px solid var(--border-color);
+        }
+
+        td {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 0.9rem;
+        }
+
+        tr:hover {
+            background: rgba(128, 128, 128, 0.05);
+        }
+
+        .severity-high {
+            color: var(--accent-secondary);
+            font-weight: 600;
+        }
+
+        .severity-low {
+            color: var(--accent-primary);
+            font-weight: 600;
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-secondary);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--accent-primary);
+            border-radius: 4px;
+        }
+
+        canvas {
+            max-width: 100%;
+        }
+
+        @media (max-width: 1200px) {
+            .two-column-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            .header {
+                flex-direction: column;
+                gap: 1rem;
+            }
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="header-left">
+            <div class="header-logo">
+                <img src="{{ url_for('static', filename='logo.png') }}" alt="IDS Logo" onerror="this.style.display='none'; this.parentElement.innerHTML='<div class=\'logo-fallback\'>IDS</div>';" width="80" height="80">
+            </div>
+            <div class="header-title">
+                <h1>Security Operations Center</h1>
+                <p>Intrusion Detection System Dashboard</p>
+            </div>
+        </div>
+        <div class="header-right">
+            <div class="status-indicator">
+                <div class="pulse-dot"></div>
+                <span>System Active</span>
+            </div>
+            <div class="status-indicator">
+                <span id="currentTime"></span>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <h2 class="section-title">System Overview</h2>
+        <p class="section-subtitle">Real-time security status and threat metrics</p>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-header">
+                    <div>
+                        <div class="stat-value" id="activeMonitoring">100%</div>
+                        <div class="stat-label">System Health</div>
+                        <div class="trend down" style="color: var(--accent-green);">✓ All systems operational</div>
+                    </div>
+                    <div class="stat-icon success">✓</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-header">
+                    <div>
+                        <div class="stat-value" id="totalThreats">0</div>
+                        <div class="stat-label">Total Threats</div>
+                        <div class="trend up">↑ <span id="threatTrend">0%</span> from yesterday</div>
+                    </div>
+                    <div class="stat-icon critical">⚠️</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-header">
+                    <div>
+                        <div class="stat-value" id="criticalAlerts">0</div>
+                        <div class="stat-label">Critical Alerts</div>
+                        <div class="trend up">↑ <span id="criticalTrend">0</span> new</div>
+                    </div>
+                    <div class="stat-icon critical">🔴</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-header">
+                    <div>
+                        <div class="stat-value" id="blockedIPs">0</div>
+                        <div class="stat-label">Blocked IPs</div>
+                        <div class="trend down">↓ <span id="blockedTrend">0</span> mitigated</div>
+                    </div>
+                    <div class="stat-icon warning">🚫</div>
+                </div>
+            </div>
+        </div>
+
+        <h2 class="section-title">Threat Activity</h2>
+        <p class="section-subtitle">Historical threat detection timeline and patterns</p>
+
+        <div class="card-container">
+            <div class="card-header">
+                <div class="card-title">Threat Activity Timeline</div>
+                <div class="time-selector">
+                    <button class="time-btn" onclick="updateChartRange('1h')">1H</button>
+                    <button class="time-btn active" onclick="updateChartRange('24h')">24H</button>
+                    <button class="time-btn" onclick="updateChartRange('7d')">7D</button>
+                    <button class="time-btn" onclick="updateChartRange('30d')">30D</button>
+                </div>
+            </div>
+            <div class="chart-canvas">
+                <canvas id="threatChart"></canvas>
+            </div>
+        </div>
+
+        <h2 class="section-title">Monitoring Center</h2>
+        <p class="section-subtitle">Live SOC logs and real-time threat feed</p>
+
+        <div class="two-column-grid">
+            <div class="card-container">
+                <div class="card-header">
+                    <div class="card-title">🛡️ SOC Log Monitoring</div>
+                </div>
+                <div class="soc-grid">
+                    <div class="soc-item">
+                        <div class="soc-value" id="socTime">-</div>
+                        <div class="soc-label">Time Window</div>
+                    </div>
+                    <div class="soc-item">
+                        <div class="soc-value" id="socTotal">0</div>
+                        <div class="soc-label">Total Logs</div>
+                    </div>
+                    <div class="soc-item">
+                        <div class="soc-value" id="socIPs">0</div>
+                        <div class="soc-label">Unique IPs</div>
+                    </div>
+                    <div class="soc-item">
+                        <div class="soc-value warning" id="socWarn">0</div>
+                        <div class="soc-label">Warnings</div>
+                    </div>
+                    <div class="soc-item">
+                        <div class="soc-value danger" id="socErr">0</div>
+                        <div class="soc-label">Errors</div>
+                    </div>
+                    <div class="soc-item">
+                        <div class="soc-value danger" id="socCrit">0</div>
+                        <div class="soc-label">Critical</div>
+                    </div>
+                    <div class="soc-item">
+                        <div class="soc-value" id="socTopIP">-</div>
+                        <div class="soc-label">Top Threat IP</div>
+                    </div>
+                    <div class="soc-item">
+                        <div class="soc-value" id="socRisk">-</div>
+                        <div class="soc-label">Risk Level</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card-container alerts-panel">
+                <div class="card-header">
+                    <div class="card-title">⚠️ Live Threat Feed</div>
+                </div>
+                <div id="alertsList"></div>
+            </div>
+        </div>
+
+        <h2 class="section-title">Intrusion Details</h2>
+        <p class="section-subtitle">Recent intrusion attempts and detected threats</p>
+
+        <div class="card-container">
+            <div class="card-header">
+                <div class="card-title">Recent Intrusion Attempts</div>
+            </div>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Timestamp</th>
+                            <th>Source IP</th>
+                            <th>Method</th>
+                            <th>Target</th>
+                            <th>Severity</th>
+                            <th>Reason</th>
+                        </tr>
+                    </thead>
+                    <tbody id="intrusionsTable">
+                        <tr>
+                            <td colspan="6" style="text-align: center; color: var(--text-secondary); padding: 2rem;">
+                                Waiting for traffic...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let threatCount = 0;
+        let criticalCount = 0;
+        let blockedCount = 0;
+        let chartData = [];
+        let chartLabels = [];
+
+        function updateTime() {
+            const now = new Date();
+            document.getElementById('currentTime').textContent = now.toLocaleTimeString('en-US', { hour12: false });
+        }
+        setInterval(updateTime, 1000);
+        updateTime();
+
+        const ctx = document.getElementById('threatChart');
+        const threatChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: chartLabels,
+                datasets: [{
+                    label: 'Threats Detected',
+                    data: chartData,
+                    borderColor: '#808080',
+                    backgroundColor: 'rgba(128, 128, 128, 0.1)',
+                    tension: 0.4,
+                    fill: true,
+                    pointRadius: 4,
+                    pointHoverRadius: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        labels: { color: '#ffffff', font: { size: 12 } }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: { color: '#b0b0b0', stepSize: 1 },
+                        grid: { color: '#4a4a4a' }
+                    },
+                    x: {
+                        ticks: { color: '#b0b0b0' },
+                        grid: { color: '#4a4a4a' }
+                    }
+                }
+            }
+        });
+
+        function updateChart(time) {
+            const timeStr = time.split(' ')[1] || new Date().toLocaleTimeString('en-US', { hour12: false }).substring(0, 5);
+            chartLabels.push(timeStr);
+            chartData.push(threatCount);
+            if (chartLabels.length > 20) {
+                chartLabels.shift();
+                chartData.shift();
+            }
+            threatChart.update();
+        }
+
+        socket.on("soc_summary", data => {
+            document.getElementById('socTime').textContent = data.time_window || "-";
+            document.getElementById('socTotal').textContent = data.total_logs || 0;
+            document.getElementById('socIPs').textContent = data.unique_ips || 0;
+            document.getElementById('socWarn').textContent = data.warnings || 0;
+            document.getElementById('socErr').textContent = data.errors || 0;
+            document.getElementById('socCrit').textContent = data.critical || 0;
+            document.getElementById('socTopIP').textContent = data.top_threat_ip || "-";
+            document.getElementById('socRisk').textContent = data.risk_level || "-";
+        });
+
+        socket.on("new_request", req => {
+            const alertsList = document.getElementById('alertsList');
+            const intrusionsTable = document.getElementById('intrusionsTable');
+
+            if (req.malicious) {
+                threatCount++;
+                criticalCount++;
+                document.getElementById('totalThreats').textContent = threatCount;
+                document.getElementById('criticalAlerts').textContent = criticalCount;
+                document.getElementById('threatTrend').textContent = threatCount + '%';
+                document.getElementById('criticalTrend').textContent = criticalCount;
+                updateChart(req.time);
+            }
+
+            const alertDiv = document.createElement('div');
+            const severity = req.malicious ? "critical" : "info";
+            alertDiv.className = 'alert-item ' + severity;
+            alertDiv.innerHTML = `
+                <div class="alert-header">
+                    <div class="alert-title">${req.malicious ? '🚨 MALICIOUS' : '✅ NORMAL'} | ${req.method} from ${req.ip}</div>
+                    <div class="alert-time">${req.time}</div>
+                </div>
+                <div class="alert-detail">Path: ${req.path}</div>
+                ${req.reason ? '<div class="alert-detail">Reason: ' + req.reason + '</div>' : ''}
+            `;
+            alertsList.insertBefore(alertDiv, alertsList.firstChild);
+            if (alertsList.children.length > 10) alertsList.removeChild(alertsList.lastChild);
+
+            const placeholder = intrusionsTable.querySelector('td[colspan]');
+            if (placeholder) {
+                intrusionsTable.innerHTML = '';
+            }
+
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${req.time}</td>
+                <td>${req.ip}</td>
+                <td>${req.method}</td>
+                <td>${req.path}</td>
+                <td class="severity-${req.malicious ? 'high' : 'low'}">${req.malicious ? 'MALICIOUS' : 'NORMAL'}</td>
+                <td>${req.reason || 'Normal Traffic'}</td>
+            `;
+            intrusionsTable.insertBefore(row, intrusionsTable.firstChild);
+            if (intrusionsTable.children.length > 20) intrusionsTable.removeChild(intrusionsTable.lastChild);
+        });
+
+        socket.on("ips_block", data => {
+            blockedCount++;
+            document.getElementById('blockedIPs').textContent = blockedCount;
+            document.getElementById('blockedTrend').textContent = blockedCount;
+            const alertDiv = document.createElement('div');
+            alertDiv.className = 'alert-item critical';
+            alertDiv.innerHTML = `
+                <div class="alert-header">
+                    <div class="alert-title">🚫 IP BLOCKED | ${data.ip}</div>
+                    <div class="alert-time">${data.time}</div>
+                </div>
+                <div class="alert-detail">Action: ${data.action} by IPS</div>
+            `;
+            document.getElementById('alertsList').insertBefore(alertDiv, document.getElementById('alertsList').firstChild);
+        });
+
+        function updateChartRange(range) {
+            document.querySelectorAll('.time-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+        }
+    </script>
+</body>
+</html>
+
